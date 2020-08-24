@@ -4,12 +4,19 @@ import colorsImg from './colors.png';
 
 import Canvas from './components/Canvas';
 import { memoizeRGB, handleDebounce } from './utils/helpers';
-import { SCALE_OPTIONS, CURSOR_OPTIONS, ARC_OPTIONS, IMAGE_DATA_OPTIONS, CLEAR_OPTIONS } from './constants';
+import { 
+  ARC_OPTIONS,
+  CLEAR_OPTIONS,
+  SCALE_OPTIONS,
+  CURSOR_OPTIONS,
+  IMAGE_DATA_OPTIONS,
+} from './constants';
 
 
 const App = () => {
-  const canvasRef = useRef(null);
+  const zoomCanvasRef = useRef(null);
   const cursorCanvasRef = useRef(null);
+  const backgroundCanvasRef = useRef(null);
   
   const mouseHistory = [];
 
@@ -18,11 +25,11 @@ const App = () => {
 
   const image = new Image();
   
-  const draw = useCallback((ctx, position = {x: 0, y: 0}, hex, mouseHistory, ctxCursor) => {
+  const draw = useCallback((ctxZoom, position = {x: 0, y: 0}, hex, mouseHistory, ctxCursor) => {
     image.src = colorsImg;
     image.onload = function() {
       mouseHistory.forEach(historyItem => {
-        ctx.clearRect(
+        ctxZoom.clearRect(
           historyItem.x - (CLEAR_OPTIONS.arcRadius / 2), 
           historyItem.y - (CLEAR_OPTIONS.arcRadius / 2), 
           CLEAR_OPTIONS.arcRadius, 
@@ -35,21 +42,20 @@ const App = () => {
           CLEAR_OPTIONS.cursorRadius,
         );
       });
-
-      ctx.save();
-        drawArc(ctx, position, hex, ARC_OPTIONS);
-        zoom(ctx, position, image, SCALE_OPTIONS);
-        fillHexColorText(ctx, position, hex);
-      ctx.restore();
+      ctxZoom.save();
+        drawArc(ctxZoom, position, hex, ARC_OPTIONS);
+        zoom(ctxZoom, position, image, SCALE_OPTIONS);
+        fillHexColorText(ctxZoom, position, hex);
+      ctxZoom.restore();
       drawCursor(ctxCursor, position, CURSOR_OPTIONS);
     }
   }, [image]);
 
   const handleMainDraw = useCallback(({pageX, pageY}) => {
-    const canvas = canvasRef.current;
+    const canvasZoom = zoomCanvasRef.current;
     const cursorCanvas = cursorCanvasRef.current;
 
-    const ctx = canvas.getContext('2d');
+    const ctxZoom = canvasZoom.getContext('2d');
     const ctxCursor = cursorCanvas.getContext('2d');
 
     const cursorPosition = {x: pageX, y: pageY};
@@ -57,7 +63,7 @@ const App = () => {
     mouseHistory.push(cursorPosition);
     debounce(() => mouseHistory.splice(0, mouseHistory.length - 1), 1000);
 
-    const image = ctx.getImageData(
+    const image = ctxZoom.getImageData(
       pageX,
       pageY,
       IMAGE_DATA_OPTIONS.width,
@@ -67,54 +73,65 @@ const App = () => {
 
     const hex = getMemoizedRBG(pixelData[0], pixelData[1], pixelData[2]);
 
-    draw(ctx, cursorPosition, hex, mouseHistory, ctxCursor);    
+    draw(ctxZoom, cursorPosition, hex, mouseHistory, ctxCursor);    
   }, [draw, mouseHistory, getMemoizedRBG, debounce])
 
 
   useEffect(() => {
     const cursorCanvas = cursorCanvasRef.current;
+
+    const backgroundCanvas = backgroundCanvasRef.current;
+    const ctxBackground = backgroundCanvas.getContext('2d');
+
+    image.src = colorsImg;
+    image.onload = () => drawBGImage(ctxBackground, image);
+
     cursorCanvas.addEventListener('mousemove', handleMainDraw);
     return () => cursorCanvas.removeEventListener('mousemove', handleMainDraw);
-  }, [handleMainDraw]);
+  }, [handleMainDraw, image]);
   
 
-  const drawArc = (ctx, {x: cursorX, y: cursorY}, hex, ARC_OPTIONS) => {  
-    ctx.beginPath();
-    ctx.lineWidth = ARC_OPTIONS.lineWidth;
-    ctx.strokeStyle = hex;
-    ctx.arc(
+  const drawArc = (ctxZoom, {x: cursorX, y: cursorY}, hex, ARC_OPTIONS) => {  
+    ctxZoom.beginPath();
+    ctxZoom.lineWidth = ARC_OPTIONS.lineWidth;
+    ctxZoom.strokeStyle = hex;
+    ctxZoom.arc(
       cursorX,
       cursorY,
       ARC_OPTIONS.radius,
       ARC_OPTIONS.startAngle,
       ARC_OPTIONS.endAngle,
     );
-    ctx.stroke();
-    ctx.clip();
-    ctx.closePath();
+    ctxZoom.stroke();
+    ctxZoom.clip();
+    ctxZoom.closePath();
   };
 
-  const drawCursor = (ctx, {x: cursorX, y: cursorY}, CURSOR_OPTIONS) => {
-    ctx.beginPath();
-    ctx.lineWidth = CURSOR_OPTIONS.lineWidth;
-    ctx.strokeStyle = '#ffffff';
-    ctx.rect(
+  const drawCursor = (ctxZoom, {x: cursorX, y: cursorY}, CURSOR_OPTIONS) => {
+    ctxZoom.beginPath();
+    ctxZoom.lineWidth = CURSOR_OPTIONS.lineWidth;
+    ctxZoom.strokeStyle = '#ffffff';
+    ctxZoom.rect(
       cursorX - CURSOR_OPTIONS.x, 
       cursorY - CURSOR_OPTIONS.y, 
       CURSOR_OPTIONS.width, 
       CURSOR_OPTIONS.height
     );
-    ctx.stroke();
-    ctx.closePath();
+    ctxZoom.stroke();
+    ctxZoom.closePath();
   };
 
-  const fillHexColorText = (ctx, cursorPosition, hex) => {
-    ctx.fillText(hex, cursorPosition.x - 20, cursorPosition.y + 30);
+  const drawBGImage = (ctxBackground, img) => {
+    ctxBackground.drawImage(img, 0, 0, img.width, img.height);
+  }
+
+  const fillHexColorText = (ctxZoom, cursorPosition, hex) => {
+    ctxZoom.fillText(hex, cursorPosition.x - 20, cursorPosition.y + 30);
   };
 
-  const zoom = (ctx, {x: positionX, y: positionY}, img, SCALE_OPTIONS) => {
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(
+  const zoom = (ctxZoom, {x: positionX, y: positionY}, img, SCALE_OPTIONS) => {
+    ctxZoom.imageSmoothingEnabled = false;
+    ctxZoom.drawImage(
       img,
       Math.min(Math.max(0, positionX - SCALE_OPTIONS.cropPosition), img.width - SCALE_OPTIONS.cropSize),
       Math.min(Math.max(0, positionY - SCALE_OPTIONS.cropPosition), img.height - SCALE_OPTIONS.cropSize),
@@ -127,14 +144,10 @@ const App = () => {
     );
   };
 
-  /**
-   * Added background image with plain css for performance reasons
-   * Also created two canvas layers for better performance
-   */
   return (
-    <div id="wrapper" style={{ backgroundImage: `url(${colorsImg})`}}>
+    <div>
       <Canvas
-        ref={canvasRef}
+        ref={zoomCanvasRef}
         id="zoom-layer"
         width={1080}
         height={916}
@@ -142,6 +155,12 @@ const App = () => {
       <Canvas
         ref={cursorCanvasRef}
         id="cursor-layer"
+        width={1080}
+        height={916}
+      />
+      <Canvas
+        ref={backgroundCanvasRef}
+        id="bg-layer"
         width={1080}
         height={916}
       />

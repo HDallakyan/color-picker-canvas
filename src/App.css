@@ -1,9 +1,3 @@
-#wrapper {
-  width: 1080px;
-  height: 916px;
-  position: relative;
-}
-
 canvas { 
   position: absolute;
   cursor: none;
@@ -15,4 +9,8 @@ canvas {
 
 #zoom-layer {
   z-index: 1;
+}
+
+#bg-layer {
+  z-index: 0;
 }
